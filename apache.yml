@@ -1,0 +1,97 @@
+---
+- name: Install Apache HTTP Server
+  hosts: web
+  become: yes  
+
+  tasks:
+    - name: Update package index
+      apt:
+        update_cache: yes  
+
+    - name: Install Apache package
+      apt:
+        name: apache2  # Package name for Apache HTTP Server
+        state: present  # Ensure package is installed
+
+    - name: ensure apache is runninh
+      service:
+        name: apache2
+        state: started
+
+
+
+- name: Clone Git Repository
+  hosts: web
+  become: yes  # Run tasks with root privileges
+
+  vars:
+    repo_url:  "https://github.com/dk2645/codedeploy-to-ec2-nodejs.git" # URL of your Git repository
+    dest_dir: "/home/ubuntu/pro"  # Destination directory to clone the repository
+
+  tasks:
+    - name: Remove existing directory
+      file:
+        path: "{{ dest_dir }}"
+        state: absent
+
+    - name: Clone Git repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ dest_dir }}"
+        update: yes  # Update the repository if it already exists
+
+
+
+- hosts: web
+  become: true
+  vars:
+    NODEJS_VERSION: "18"
+  tasks:
+    - name: Install the gpg key for nodejs LTS
+      apt_key:
+        url: "https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+        state: present
+      when: ansible_distribution == "Ubuntu"
+    
+    - name: Install the nodejs LTS repos
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_{{ NODEJS_VERSION }}.x {{ ansible_distribution_release }} main"
+        state: present
+        update_cache: yes
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install the nodejs
+      apt:
+        name: nodejs
+        state: present
+      when: ansible_distribution == "Ubuntu"
+
+
+
+- name: Install PM2 globally and start Node.js application
+  hosts: web
+  become: yes
+
+  tasks:
+    - name: Install PM2 globally
+      npm:
+        name: pm2
+        global: yes
+    - name: change-owner
+      file:
+        path: /home/ubuntu/pro
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+        state: directory
+
+    - name: Install npm dependencies
+      command: npm i
+      args:
+        chdir: /home/ubuntu/pro
+
+
+    - name: Start Node.js application with PM2
+      command:  pm2 start server.js
+      args:
+        chdir: /home/ubuntu/pro
